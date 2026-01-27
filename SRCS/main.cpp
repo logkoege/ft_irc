@@ -1,4 +1,5 @@
-#include "../INCLUDES/ft_irc.hpp"
+#include "../INCLUDES/serv.hpp"
+#include "../INCLUDES/client.hpp"
 
 int main(int argc, char **argv)
 {
@@ -8,7 +9,8 @@ int main(int argc, char **argv)
             throw std::logic_error("Error : ./ircserv <port> <password>");
         
         
-        int port = std::atoi(argv[1]);
+        int port = atoi(argv[1]);
+
         if (port <= 0 || port > 65535)
             throw std::logic_error("Error : incorrect port");
         std::string password = argv[2];
