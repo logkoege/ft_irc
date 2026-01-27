@@ -77,7 +77,7 @@ void serv::handleClient(size_t i)
         return;
     }
     buffer[bytes] = '\0';
-    std::cout << _client[fd].name << "a dis : " << buffer << std::endl;
+    std::cout << _client[fd].name << " a dis : " << buffer << std::endl;
 }
 
 void serv::run()
