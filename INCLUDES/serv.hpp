@@ -12,6 +12,7 @@
 #include <string>
 #include <cstdlib>
 #include <cstring>
+#include <sstream>
 #include <map>
 #include "client.hpp"
 
@@ -37,5 +38,10 @@ class serv
         ~serv();
 
         void run();
+
+        void    handleNick(int fd, std::istringstream &iss);
+        bool    alreadyUsedName(const std::string &nick) const;
+        void    sendToClient(int fd, const std::string &msg);
+
 
 };

@@ -14,12 +14,27 @@
 #include <cstring>
 
 class client
-{ 
-    public:
-        int _fd;
-        std::string name;
-
+{
+    private:
+        bool        _authenticated;
+        int         _fd;
+        std::string _buffer;
+        std::string _name;
+        
+        public:
+        
         client();
         ~client();
         client(int fd);
+
+        int         getFd() const;
+        bool        isAuthenticated() const;
+        const       std::string &getName() const;
+
+        void        addBuffer(const std::string &data);
+        bool        extractLine(std::string &line);
+
+        void        setName(const std::string &name);
+        void        authenticate();
+        
 };

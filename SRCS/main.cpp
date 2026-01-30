@@ -7,18 +7,13 @@ int main(int argc, char **argv)
     {
         if (argc != 3)
             throw std::logic_error("Error : ./ircserv <port> <password>");
-        
-        
         int port = atoi(argv[1]);
-
         if (port <= 0 || port > 65535)
             throw std::logic_error("Error : incorrect port");
         std::string password = argv[2];
-
         serv server(port, password);
         server.run();
     }
-
     catch(std::exception &e)
     {
         std::cerr << e.what() << std::endl;

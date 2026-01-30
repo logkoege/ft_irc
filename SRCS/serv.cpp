@@ -43,7 +43,6 @@ void serv::initSocket()
     _pfds.push_back(pfd);
     
     std::cout << "serv up" << std::endl;
-
 }
 
 void serv::acceptNewClient()
@@ -60,7 +59,7 @@ void serv::acceptNewClient()
 
     _client[clientFd] = client(clientFd);
 
-    std::cout << "client connect( " << _client[clientFd].name << " )" << std::endl;
+    std::cout << "client connect( " << _client[clientFd].getName() << " )" << std::endl;
 }
 
 void serv::handleClient(size_t i)
@@ -68,16 +67,28 @@ void serv::handleClient(size_t i)
     int fd = _pfds[i].fd;
     char buffer[512];
     int bytes = recv(_pfds[i].fd, buffer, sizeof(buffer) -1, 0);
+    std::string line;
+
     if (bytes <= 0)
     {
-        std::cout << _client[fd].name << "deco" << std::endl;
+        std::cout << _client[fd].getName() << "deco" << std::endl;
         close(_pfds[i].fd);
-        _pfds.erase(_pfds.begin() + 1);
+        _pfds.erase(_pfds.begin() + i);
         _client.erase(fd);
         return;
     }
     buffer[bytes] = '\0';
-    std::cout << _client[fd].name << " a dis : " << buffer << std::endl;
+    _client[fd].addBuffer(buffer);
+    while (_client[fd].extractLine(line))
+    {
+        //std::cout << _client[fd].getName() << " a dis " << line << std::endl;
+
+        std::istringstream  iss(line);
+        std::string cmd;
+        iss >> cmd;
+        if (cmd == "NICK")
+            handleNick(fd, iss);
+    }
 }
 
 void serv::run()
@@ -87,8 +98,8 @@ void serv::run()
     {
         for (size_t i = 0; i < _pfds.size(); i++)
             _pfds[i].revents = 0;
-        //if (_pfds.empty())
-            //continue;
+        if (_pfds.empty())
+            continue;
         if (poll(&_pfds[0], _pfds.size(), -1) < 0)
             throw std::runtime_error("poll prblm");
         for (size_t i = 0; i < _pfds.size(); i++)
@@ -104,3 +115,37 @@ void serv::run()
     }
 }
 
+void serv::handleNick(int fd, std::istringstream &iss)
+{
+    std::string newName;
+    iss >> newName;
+
+    if (newName.empty())
+    {
+        sendToClient(fd, "431 :No name given\r\n");
+        return;
+    }
+
+    if (alreadyUsedName(newName))
+    {
+        sendToClient(fd, "433 " + newName + ":Name is already use\r\n");
+        return;
+    }
+    _client[fd].setName(newName);
+}
+
+bool serv::alreadyUsedName(const std::string &nick) const
+{
+
+    for (std::map<int, client>::const_iterator it = _client.begin(); it != _client.end(); ++it)
+    {
+        if (it->second.getName() == nick)
+            return (true);
+    }
+    return (false);
+}
+
+void serv::sendToClient(int fd, const std::string &msg)
+{
+    send(fd, msg.c_str(), msg.size(), 0);
+}
