@@ -1,4 +1,5 @@
 #pragma once
+
 #include <iostream>
 #include <vector>
 #include <sys/socket.h>
@@ -14,6 +15,9 @@
 #include <cstring>
 #include <sstream>
 #include <map>
+#include <algorithm>
+#include <cassert>
+#include <complex>
 #include "client.hpp"
 
 class serv
@@ -27,6 +31,7 @@ class serv
 
         int _serverFd;
         std::vector<struct pollfd> _pfds;
+
 
         void initSocket();
         void acceptNewClient();
@@ -43,5 +48,10 @@ class serv
         bool    alreadyUsedName(const std::string &nick) const;
         void    sendToClient(int fd, const std::string &msg);
 
+        void    handlePass(int fd, std::istringstream &iss);
+
+        void    handleUser(int fd, std::istringstream &iss);
+
+        void    handleMessPv(int fd, char *buff);
 
 };

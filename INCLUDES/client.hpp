@@ -12,14 +12,23 @@
 #include <string>
 #include <cstdlib>
 #include <cstring>
+#include <sstream>
+#include <map>
+#include <algorithm>
+#include <cassert>
+#include <complex>
 
 class client
 {
     private:
+        bool        _user;
+        bool        _nick;
+        bool        _registered;
         bool        _authenticated;
         int         _fd;
-        std::string _buffer;
         std::string _name;
+        std::string _username;
+        std::string _buffer;
         
         public:
         
@@ -36,5 +45,10 @@ class client
 
         void        setName(const std::string &name);
         void        authenticate();
-        
+        void        setUser(const std::string &username);
+        bool        isRegistered() const;
+        const       std::string &getUser()const;
+        void        setregister();
+
+
 };

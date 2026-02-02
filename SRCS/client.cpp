@@ -1,11 +1,11 @@
 #include "../INCLUDES/serv.hpp"
 #include "../INCLUDES/client.hpp"
 
-client::client() : _authenticated(false), _fd(-1), _name("clanker_"){}
+client::client() : _user(false), _nick(false), _registered(false), _authenticated(false), _fd(-1), _name("Clanker_"){}
 client::~client(){}
-client::client(int fd) :  _authenticated(false), _fd(fd)
+client::client(int fd) :  _user(false), _nick(false), _registered(false), _authenticated(false), _fd(fd)
 {
-    _name = "levai_";
+    _name = "Levai_";
 
     if (fd == 0)
         _name += '0';
@@ -42,19 +42,39 @@ bool    client::extractLine(std::string &line)
     if (pos == std::string::npos)
         return (false);
     line = _buffer.substr(0, pos);
-    if (!line.empty() && line[line.size() -1 == '\r'])
-        line.erase(line.size() - 1);
     _buffer.erase(0, pos + 1);
     return (true);
-    
 }
 
 void    client::setName(const std::string &name)
 {
     this->_name = name;
+    this->_nick = true;
 }
 
 void    client::authenticate()
 {
     this->_authenticated = true;
+}
+
+void    client::setUser(const std::string &username)
+{
+    this->_username = username;
+    this->_user = true;
+}
+
+const std::string &client::getUser()const
+{
+    return(this->_username);
+}
+
+bool    client::isRegistered() const
+{
+    return(_registered);
+}
+
+void    client::setregister()
+{
+    if (this->_nick && this->_user && this->_authenticated)
+        this->_registered = true;
 }

@@ -22,19 +22,19 @@ void serv::initSocket()
 {
     _serverFd = socket(AF_INET, SOCK_STREAM, 0);
     if (_serverFd < 0)
-        throw std::runtime_error("socket prblm");
+        throw std::runtime_error("Socket prblm");
     int opt = 1;
     if (setsockopt(_serverFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
-        throw std::runtime_error("setsocket prblm");
+        throw std::runtime_error("Setsocket prblm");
     sockaddr_in addr;
     std::memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_port = htons(_Port);
     if(bind(_serverFd, (sockaddr *)&addr, sizeof(addr)) < 0)
-        throw std::runtime_error("bind prblm");
+        throw std::runtime_error("Bind prblm");
     if (listen(_serverFd, SOMAXCONN) < 0)
-        throw std::runtime_error("listen prblm");
+        throw std::runtime_error("Listen prblm");
     fcntl(_serverFd, F_SETFL, O_NONBLOCK);
     pollfd pfd;
     pfd.fd = _serverFd;
@@ -42,7 +42,7 @@ void serv::initSocket()
     pfd.revents = 0;
     _pfds.push_back(pfd);
     
-    std::cout << "serv up" << std::endl;
+    std::cout << "Serv up" << std::endl;
 }
 
 void serv::acceptNewClient()
@@ -56,10 +56,9 @@ void serv::acceptNewClient()
     pfd.events = POLLIN;
     pfd.revents = 0;
     _pfds.push_back(pfd);
-
     _client[clientFd] = client(clientFd);
 
-    std::cout << "client connect( " << _client[clientFd].getName() << " )" << std::endl;
+    std::cout << "Client connect( " << _client[clientFd].getName() << " )" << std::endl;
 }
 
 void serv::handleClient(size_t i)
@@ -71,7 +70,7 @@ void serv::handleClient(size_t i)
 
     if (bytes <= 0)
     {
-        std::cout << _client[fd].getName() << "deco" << std::endl;
+        std::cout << "Someone leaved -> " << _client[fd].getName() << std::endl;
         close(_pfds[i].fd);
         _pfds.erase(_pfds.begin() + i);
         _client.erase(fd);
@@ -81,13 +80,17 @@ void serv::handleClient(size_t i)
     _client[fd].addBuffer(buffer);
     while (_client[fd].extractLine(line))
     {
-        //std::cout << _client[fd].getName() << " a dis " << line << std::endl;
-
         std::istringstream  iss(line);
         std::string cmd;
         iss >> cmd;
         if (cmd == "NICK")
             handleNick(fd, iss);
+        if (cmd == "PASS")
+            handlePass(fd, iss);
+        if (cmd == "USER")
+            handleUser(fd, iss);
+        if (cmd == "MESS_PV")
+            handleMessPv(fd, buffer);
     }
 }
 
@@ -101,7 +104,7 @@ void serv::run()
         if (_pfds.empty())
             continue;
         if (poll(&_pfds[0], _pfds.size(), -1) < 0)
-            throw std::runtime_error("poll prblm");
+            throw std::runtime_error("Poll prblm");
         for (size_t i = 0; i < _pfds.size(); i++)
         {
             if (_pfds[i].revents & POLLIN)
@@ -120,19 +123,22 @@ void serv::handleNick(int fd, std::istringstream &iss)
     std::string newName;
     iss >> newName;
 
+    std::cout << newName<< std::endl;
     if (newName.empty())
     {
-        sendToClient(fd, "431 :No name given\r\n");
+        sendToClient(fd, "431 : No name given\r\n");
         return;
     }
 
     if (alreadyUsedName(newName))
     {
-        sendToClient(fd, "433 " + newName + ":Name is already use\r\n");
+        sendToClient(fd, "433 " + newName + " : Name is already use\r\n");
         return;
     }
     _client[fd].setName(newName);
-}
+    _client[fd].setregister();
+    if (_client[fd].isRegistered())
+        sendToClient(fd, "you are registered\nyour nickname : " + _client[fd].getName() + "\nyour username : " + _client[fd].getUser() + "\r\n");}
 
 bool serv::alreadyUsedName(const std::string &nick) const
 {
@@ -148,4 +154,56 @@ bool serv::alreadyUsedName(const std::string &nick) const
 void serv::sendToClient(int fd, const std::string &msg)
 {
     send(fd, msg.c_str(), msg.size(), 0);
+}
+
+
+void serv::handlePass(int fd, std::istringstream &iss)
+{
+    std::string password;
+    iss >> password;
+
+    if (password != _Password)
+        sendToClient(fd, "wrong password\r\n");
+    else 
+        _client[fd].authenticate();
+    _client[fd].setregister();
+    if (_client[fd].isRegistered())
+        sendToClient(fd, "you are registered\nyour nickname : " + _client[fd].getName() + "\nyour username : " + _client[fd].getUser() + "\r\n");
+}
+
+void serv::handleUser(int fd, std::istringstream &iss)
+{
+    std::string username;
+    iss >> username;
+
+    if (username.empty())
+    {
+        sendToClient(fd, "empty username\r\n");
+        return;
+    }
+    _client[fd].setUser(username);
+    _client[fd].setregister();
+    if (_client[fd].isRegistered())
+        sendToClient(fd, "you are registered\nyour nickname : " + _client[fd].getName() + "\nyour username : " + _client[fd].getUser() + "\r\n");
+}
+
+void serv::handleMessPv(int fd, char *buff)
+{
+    if (!(_client[fd].isRegistered()))
+    {
+        sendToClient(fd,
+            "you cannot send private messages if you are not registered\r\n");
+        return;
+    }
+    std::string msg(buff);
+    // while (!msg.empty() &&
+    //       (msg[msg.size() - 1] == '\n' || msg[msg.size() - 1] == '\r'))
+    //     msg.erase(msg.size() - 1);
+    size_t start = 0;
+    while (start < msg.size() && msg[start] == ' ')
+        start++;
+    msg.erase(0, start);
+    if (msg.compare(0, 8, "MESS_PV ") == 0)
+        msg.erase(0, 8);
+    std::cout << "msg = [" << msg << "]" << std::endl;
 }
