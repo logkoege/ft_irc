@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cassert>
 #include <complex>
+#include <set>
 #include "client.hpp"
 #include "channel.hpp"
 
@@ -34,6 +35,7 @@ class serv
         int _serverFd;
         std::vector<struct pollfd> _pfds;
 
+        std::map<std::string, channel> _channels;
 
         void initSocket();
         void acceptNewClient();
@@ -49,13 +51,17 @@ class serv
         void        handleNick(int fd, std::istringstream &iss);
         bool        alreadyUsedName(const std::string &nick) const;
         void        sendToClient(int fd, const std::string &msg);
+        void        sendToClientFromClient(int fd, int userfd, std::string msg);
 
         void        handlePass(int fd, std::istringstream &iss);
 
         void        handleUser(int fd, std::istringstream &iss);
 
-        void        handleMessPv(int fd, char *buff);
+        void        handlePrivmsg(int fd, std::string &line);
         std::string findUserNick(std::string msg);
         int         findUserFd(std::string user);
+        void        handleJoin(int fd, std::istringstream &iss);
+        void        sendToUser(int fd, std::string msg);
+        void        sendToChannel(int fd, std::string msg);
 
 };

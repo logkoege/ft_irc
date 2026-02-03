@@ -1,9 +1,7 @@
 #include "../INCLUDES/serv.hpp"
 #include "../INCLUDES/client.hpp"
 
-
 serv::serv() : _Port(0), _serverFd(-1) {}
-
 
 serv::serv(int port, std::string password)
 {
@@ -58,7 +56,7 @@ void serv::acceptNewClient()
     _pfds.push_back(pfd);
     _client[clientFd] = client(clientFd);
 
-    std::cout << "Client connect( " << _client[clientFd].getName() << " )" << std::endl;
+    std::cout << "Client connect -> " << _client[clientFd].getName() << std::endl;
 }
 
 void serv::handleClient(size_t i)
@@ -70,7 +68,7 @@ void serv::handleClient(size_t i)
 
     if (bytes <= 0)
     {
-        std::cout << "Someone leaved -> " << _client[fd].getName() << std::endl;
+        std::cout << "Client leaved -> " << _client[fd].getName() << std::endl;
         close(_pfds[i].fd);
         _pfds.erase(_pfds.begin() + i);
         _client.erase(fd);
@@ -90,7 +88,9 @@ void serv::handleClient(size_t i)
         if (cmd == "USER")
             handleUser(fd, iss);
         if (cmd == "PRIVMSG")
-            handleMessPv(fd, buffer);
+            handlePrivmsg(fd, line);
+        if (cmd == "JOIN")
+            handleJoin(fd, iss);
     }
 }
 
@@ -123,7 +123,6 @@ void serv::handleNick(int fd, std::istringstream &iss)
     std::string newName;
     iss >> newName;
 
-    std::cout << newName<< std::endl;
     if (newName.empty())
     {
         sendToClient(fd, "431 : No name given\r\n");
@@ -184,10 +183,11 @@ void serv::handleUser(int fd, std::istringstream &iss)
     _client[fd].setUser(username);
     _client[fd].setregister();
     if (_client[fd].isRegistered())
-        sendToClient(fd, "you are registered\nyour nickname : " + _client[fd].getName() + "\nyour username : " + _client[fd].getUser() + "\r\n");
+        sendToClient(fd, "you are registered\nyour nickname : "
+            + _client[fd].getName() + "\nyour username : " + _client[fd].getUser() + "\r\n");
 }
 
-void serv::handleMessPv(int fd, char *buff)
+void serv::handlePrivmsg(int fd, std::string &line)
 {
     if (!(_client[fd].isRegistered()))
     {
@@ -195,7 +195,7 @@ void serv::handleMessPv(int fd, char *buff)
             "you cannot send private messages if you are not registered\r\n");
         return;
     }
-    std::string msg(buff);
+    std::string msg(line);
     while (!msg.empty() &&
             (msg[msg.size() - 1] == '\n' || msg[msg.size() - 1] == '\r'))
         msg.erase(msg.size() - 1);
@@ -204,21 +204,51 @@ void serv::handleMessPv(int fd, char *buff)
         start++;
     msg.erase(0, start);
     if (msg.compare(0, 8, "PRIVMSG ") == 0)
-    msg.erase(0, 8);
+        msg.erase(0, 8);
+    if (msg[0] == '#')
+        sendToChannel(fd, msg);
+    else
+        sendToUser(fd, msg);
+}
+
+void serv::sendToChannel(int fd, std::string msg)
+{
+    size_t pos = msg.find(' ');
+    if (pos == std::string::npos)
+        return (sendToClient(fd, "No text to send\r\n"));
+
+    std::string chanName = msg.substr(0, pos);
+    std::string text = msg.substr(pos + 1);
+
+    std::map<std::string, channel>::iterator it = _channels.find(chanName);
+    if (it == _channels.end())
+        return (sendToClient(fd, "No such channel\r\n"));
+    if (!it->second.hasClient(fd))
+        return (sendToClient(fd, "You are not in this channel\r\n"));
+    std::string out =  _client[fd].getName() + " sended  an msg in -> " + chanName + "  and sayed -> " + text + "\r\n";
+
+    std::set<int> &clients = it->second.getClient();
+    for (std::set<int>::iterator its = clients.begin(); its != clients.end(); ++its)
+        if (*its != fd)
+            send(*its, out.c_str(), out.size(), 0);
+}
+
+void    serv::sendToUser(int fd, std::string msg)
+{
     std::string user = findUserNick(msg);
     msg.erase(0, user.size() + 1);
-    std::cout <<  "user recherche = " << user << std::endl;
     int userfd = findUserFd(user);
     if (userfd == -1)
         sendToClient(fd, "User not found\r\n");
     else
-        sendToClient(userfd, msg);
+        sendToClientFromClient(fd, userfd, msg);
 }
 
 std::string serv::findUserNick(std::string msg)
 {
     std::string user(msg);
     int i = 0;
+
     while (msg[i] != ' ')
     {    
         i++;
@@ -226,7 +256,6 @@ std::string serv::findUserNick(std::string msg)
     user.erase(i, msg.size());
     return (user);
 }
-
 
 int serv::findUserFd(std::string user)
 {
@@ -241,3 +270,36 @@ int serv::findUserFd(std::string user)
     }
     return(userfd);
 }
+
+void serv::sendToClientFromClient(int fd, int userfd, std::string msg)
+{
+    std::map<int, client>::iterator it = _client.begin();
+
+    while(it != _client.end())
+    {
+        if(it->second.getFd() == fd)
+            msg = "u receved a message from : " + it->second.getName() + " -> " + msg;
+        it++;
+    }
+    send(userfd, msg.c_str(), msg.size(), 0);
+}
+
+void serv::handleJoin(int fd, std::istringstream &iss)
+{
+    std::string chanName;
+    iss >> chanName;
+
+    if (chanName.empty() || chanName[0] != '#')
+    {
+        sendToClient(fd, "Invalid channel name\r\n");
+        return;
+    }
+
+    if (_channels.find(chanName) == _channels.end())
+        _channels[chanName] = channel(chanName);
+
+    _channels[chanName].addClient(fd);
+
+    sendToClient(fd, "Joined " + chanName + "\r\n");
+}
+

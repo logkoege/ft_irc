@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cassert>
 #include <complex>
+#include <set>
 
 class client
 {
