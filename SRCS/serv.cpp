@@ -89,7 +89,7 @@ void serv::handleClient(size_t i)
             handlePass(fd, iss);
         if (cmd == "USER")
             handleUser(fd, iss);
-        if (cmd == "MESS_PV")
+        if (cmd == "PRIVMSG")
             handleMessPv(fd, buffer);
     }
 }
@@ -196,14 +196,48 @@ void serv::handleMessPv(int fd, char *buff)
         return;
     }
     std::string msg(buff);
-    // while (!msg.empty() &&
-    //       (msg[msg.size() - 1] == '\n' || msg[msg.size() - 1] == '\r'))
-    //     msg.erase(msg.size() - 1);
+    while (!msg.empty() &&
+            (msg[msg.size() - 1] == '\n' || msg[msg.size() - 1] == '\r'))
+        msg.erase(msg.size() - 1);
     size_t start = 0;
     while (start < msg.size() && msg[start] == ' ')
         start++;
     msg.erase(0, start);
-    if (msg.compare(0, 8, "MESS_PV ") == 0)
-        msg.erase(0, 8);
-    std::cout << "msg = [" << msg << "]" << std::endl;
+    if (msg.compare(0, 8, "PRIVMSG ") == 0)
+    msg.erase(0, 8);
+    std::string user = findUserNick(msg);
+    msg.erase(0, user.size() + 1);
+    std::cout <<  "user recherche = " << user << std::endl;
+    int userfd = findUserFd(user);
+    if (userfd == -1)
+        sendToClient(fd, "User not found\r\n");
+    else
+        sendToClient(userfd, msg);
+}
+
+std::string serv::findUserNick(std::string msg)
+{
+    std::string user(msg);
+    int i = 0;
+    while (msg[i] != ' ')
+    {    
+        i++;
+    }
+    user.erase(i, msg.size());
+    return (user);
+}
+
+
+int serv::findUserFd(std::string user)
+{
+    int userfd = -1;
+    std::map<int, client>::iterator it = _client.begin();
+
+    while(it != _client.end())
+    {
+        if(it->second.getName() == user)
+        userfd = it->first;
+        it++;
+    }
+    return(userfd);
 }

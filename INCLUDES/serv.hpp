@@ -19,6 +19,8 @@
 #include <cassert>
 #include <complex>
 #include "client.hpp"
+#include "channel.hpp"
+
 
 class serv
 {
@@ -44,14 +46,16 @@ class serv
 
         void run();
 
-        void    handleNick(int fd, std::istringstream &iss);
-        bool    alreadyUsedName(const std::string &nick) const;
-        void    sendToClient(int fd, const std::string &msg);
+        void        handleNick(int fd, std::istringstream &iss);
+        bool        alreadyUsedName(const std::string &nick) const;
+        void        sendToClient(int fd, const std::string &msg);
 
-        void    handlePass(int fd, std::istringstream &iss);
+        void        handlePass(int fd, std::istringstream &iss);
 
-        void    handleUser(int fd, std::istringstream &iss);
+        void        handleUser(int fd, std::istringstream &iss);
 
-        void    handleMessPv(int fd, char *buff);
+        void        handleMessPv(int fd, char *buff);
+        std::string findUserNick(std::string msg);
+        int         findUserFd(std::string user);
 
 };
