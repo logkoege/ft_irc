@@ -22,6 +22,7 @@
 class client
 {
     private:
+        bool        _op;
         bool        _user;
         bool        _nick;
         bool        _registered;
@@ -40,16 +41,15 @@ class client
         int         getFd() const;
         bool        isAuthenticated() const;
         const       std::string &getName() const;
-
         void        addBuffer(const std::string &data);
         bool        extractLine(std::string &line);
-
         void        setName(const std::string &name);
         void        authenticate();
         void        setUser(const std::string &username);
         bool        isRegistered() const;
         const       std::string &getUser()const;
-        void        setregister();
-
-
-};
+        void        setRegister();
+        bool        isOp();
+        void        Op();
+        void        deOp();
+    };
