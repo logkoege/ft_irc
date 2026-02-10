@@ -22,7 +22,6 @@
 class client
 {
     private:
-        bool        _op;
         bool        _user;
         bool        _nick;
         bool        _registered;
@@ -49,7 +48,4 @@ class client
         bool        isRegistered() const;
         const       std::string &getUser()const;
         void        setRegister();
-        bool        isOp();
-        void        Op();
-        void        deOp();
     };

@@ -1,9 +1,9 @@
 #include "../INCLUDES/serv.hpp"
 #include "../INCLUDES/client.hpp"
 
-client::client() : _op(false), _user(false), _nick(false), _registered(false), _authenticated(false), _fd(-1), _name("Clanker_"){}
+client::client() : _user(false), _nick(false), _registered(false), _authenticated(false), _fd(-1), _name("Clanker_"){}
 
-client::client(int fd) :  _op(false), _user(false), _nick(false), _registered(false), _authenticated(false), _fd(fd)
+client::client(int fd) : _user(false), _nick(false), _registered(false), _authenticated(false), _fd(fd)
 {
     _name = "Levai_";
     
