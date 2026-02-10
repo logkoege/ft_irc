@@ -318,7 +318,7 @@ void    serv::handleJoin(int fd, std::istringstream &iss)
         chan.addOp(fd);
     std::string out = ":" + _client[fd].getName() + " JOIN " + chanName + "\r\n";
     sendToClient(fd, out);
-    sendJoinToChannel(out, chanName, fd); // <- on passe fd pour exclure le client lui-même
+    sendJoinToChannel(out, chanName, fd);
 
 }
 
