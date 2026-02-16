@@ -59,17 +59,52 @@ void    serv::acceptNewClient()
     std::cout << "Client connect -> " << _client[clientFd].getName() << std::endl;
 }
 
-void    serv::handleClient(size_t i)
+void serv::handleClient(size_t i)
 {
     int fd = _pfds[i].fd;
     char buffer[512];
-    int bytes = recv(_pfds[i].fd, buffer, sizeof(buffer) -1, 0);
+    int bytes = recv(fd, buffer, sizeof(buffer) - 1, 0);
     std::string line;
 
     if (bytes <= 0)
     {
+        while (_client[fd].extractLine(line))
+        {
+            std::istringstream iss(line);
+            std::string cmd;
+            iss >> cmd;
+
+            if (cmd == "NICK")
+                handleNick(fd, iss);
+            if (cmd == "PASS")
+                handlePass(fd, iss);
+            if (cmd == "USER")
+                handleUser(fd, iss);
+            if (cmd == "PRIVMSG")
+                handlePrivmsg(fd, line);
+            if (cmd == "JOIN")
+                handleJoin(fd, iss);
+            if (cmd == "KICK")
+                handleKick(fd, iss);
+            if (cmd == "MODE")
+                handleMode(fd, iss);
+            if (cmd == "QUIT")
+                handleQuit(fd);
+            if (cmd == "NAMES")
+                handleNames(fd, iss);
+            if (cmd == "PART")
+                handlePart(fd, iss);
+            if (cmd == "LIST")
+                handleList(fd);
+            if (cmd == "INVITE")
+                handleInvite(fd, iss);
+            if (cmd == "WHO")
+                handleWho(fd, iss);
+            if (cmd == "TOPIC")
+                handleTopic(fd, iss);
+        }
         std::cout << "Client leaved -> " << _client[fd].getName() << std::endl;
-        close(_pfds[i].fd);
+        close(fd);
         _pfds.erase(_pfds.begin() + i);
         _client.erase(fd);
         return;
@@ -78,9 +113,10 @@ void    serv::handleClient(size_t i)
     _client[fd].addBuffer(buffer);
     while (_client[fd].extractLine(line))
     {
-        std::istringstream  iss(line);
+        std::istringstream iss(line);
         std::string cmd;
         iss >> cmd;
+
         if (cmd == "NICK")
             handleNick(fd, iss);
         if (cmd == "PASS")
@@ -111,6 +147,7 @@ void    serv::handleClient(size_t i)
             handleTopic(fd, iss);
     }
 }
+
 
 void    serv::run()
 {
@@ -268,11 +305,8 @@ std::string serv::findUserNick(std::string msg)
 {
     std::string user(msg);
     int i = 0;
-
     while (msg[i] != ' ')
-    {    
         i++;
-    }
     user.erase(i, msg.size());
     return (user);
 }
