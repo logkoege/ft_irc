@@ -266,7 +266,7 @@ void    serv::handlePrivmsg(int fd, std::string &line)
     {
         std::string out = ":" + _client[fd].getName() + "!" + _client[fd].getUser() +
                           "@localhost PRIVMSG " + target + " :" + text + "\r\n";
-        sendToChannel(target, out);
+        sendToChannelExcept(target, out, fd);
     }
     else
     {
@@ -545,7 +545,7 @@ void    serv::handleTopic(int fd, std::istringstream &iss)
         return sendReply(fd, "442", chanName + " :You're not on that channel");
     if (!newTopic.empty())
     {
-        if (!it->second.isOp(fd))
+        if (it->second.isTopicOnly() && !it->second.isOp(fd))
             return sendReply(fd, "482", chanName + " :You're not channel operator");
         it->second.setTopic(newTopic);
         std::string msg = ":" + _client[fd].getName() + " TOPIC " + chanName + " :" + newTopic + "\r\n";
