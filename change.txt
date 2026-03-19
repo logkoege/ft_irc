@@ -1,0 +1,15 @@
+update :
+    fix part
+    fix join
+    fix hexchat part
+    fix hexchat deco
+    fix hexchat list user
+    modif de pleins de msg d'erreurs (protocole RFP)
+    fix des leak avec ctrl-c 
+    fix du -l
+    fix kick msg
+
+prblm qui existe encore :
+    peut pas join plusieur channel en meme temps (on peut JOIN #chan  si on ctrl-c/v (ca marche) mais il faut JOIN #42,#43,#44...)
+                                                          JOIN #chan2
+    pareil pour toute les autres cmd : KICK JOIN PART...
