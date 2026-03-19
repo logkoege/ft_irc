@@ -1,5 +1,15 @@
 #include "../INCLUDES/serv.hpp"
 #include "../INCLUDES/client.hpp"
+#include <csignal>
+
+serv *g_server = NULL;
+
+void handle_sigint(int sig)
+{
+    (void)sig;
+    if (g_server)
+        g_server->stop();
+}
 
 int main(int argc, char **argv)
 {
@@ -13,20 +23,16 @@ int main(int argc, char **argv)
         int i = 0;
         while (argv[2][i])
         {
-            if(!isalnum(argv[2][i]))
-            {
+            if (!isalnum(argv[2][i]))
                 throw std::logic_error("Error : password must contain alphanumeric charatere");
-                return 1;
-            }    
             i++;
         }
         if (strlen(argv[2]) == 0)
-        {
             throw std::logic_error("Error : password must contain alphanumeric charatere");
-            return 1;
-        }
         std::string password = argv[2];
         serv server(port, password);
+        g_server = &server;
+        signal(SIGINT, handle_sigint);
         server.run();
     }
     catch(std::exception &e)
@@ -34,4 +40,5 @@ int main(int argc, char **argv)
         std::cerr << e.what() << std::endl;
         return 1;
     }
+    return 0;
 }

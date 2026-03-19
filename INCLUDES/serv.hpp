@@ -33,6 +33,7 @@ class serv
         int _serverFd;
         std::vector<struct pollfd> _pfds;
         std::map<std::string, channel> _channels;
+        bool _running;
 
         void        initSocket();
         void        acceptNewClient();
@@ -43,6 +44,7 @@ class serv
         serv(int port, std::string password);
         ~serv();
 
+        void        stop();
         void        run();
         void        handleNick(int fd, std::istringstream &iss);
         bool        alreadyUsedName(const std::string &nick) const;

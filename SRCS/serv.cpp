@@ -1,13 +1,14 @@
 #include "../INCLUDES/serv.hpp"
 #include "../INCLUDES/client.hpp"
 
-serv::serv() : _Port(0), _serverFd(-1) {}
+serv::serv() : _Port(0), _serverFd(-1), _running(true) {}
 
 serv::serv(int port, std::string password)
 {
     _Port = port;
     _Password = password;
     _serverFd = -1;
+    _running = true;
 }
 
 serv::~serv()
@@ -58,7 +59,6 @@ void    serv::acceptNewClient()
 
     std::cout << "Client connect -> " << _client[clientFd].getName() << std::endl;
 }
-
 void serv::handleClient(size_t i)
 {
     int fd = _pfds[i].fd;
@@ -68,47 +68,10 @@ void serv::handleClient(size_t i)
 
     if (bytes <= 0)
     {
-        while (_client[fd].extractLine(line))
-        {
-            std::istringstream iss(line);
-            std::string cmd;
-            iss >> cmd;
-
-            if (cmd == "NICK")
-                handleNick(fd, iss);
-            if (cmd == "PASS")
-                handlePass(fd, iss);
-            if (cmd == "USER")
-                handleUser(fd, iss);
-            if (cmd == "PRIVMSG")
-                handlePrivmsg(fd, line);
-            if (cmd == "JOIN")
-                handleJoin(fd, iss);
-            if (cmd == "KICK")
-                handleKick(fd, iss);
-            if (cmd == "MODE")
-                handleMode(fd, iss);
-            if (cmd == "QUIT")
-                handleQuit(fd);
-            if (cmd == "NAMES")
-                handleNames(fd, iss);
-            if (cmd == "PART")
-                handlePart(fd, iss);
-            if (cmd == "LIST")
-                handleList(fd);
-            if (cmd == "INVITE")
-                handleInvite(fd, iss);
-            if (cmd == "WHO")
-                handleWho(fd, iss);
-            if (cmd == "TOPIC")
-                handleTopic(fd, iss);
-        }
-        std::cout << "Client leaved -> " << _client[fd].getName() << std::endl;
-        close(fd);
-        _pfds.erase(_pfds.begin() + i);
-        _client.erase(fd);
+        handleQuit(fd);
         return;
     }
+
     buffer[bytes] = '\0';
     _client[fd].addBuffer(buffer);
     while (_client[fd].extractLine(line))
@@ -148,18 +111,27 @@ void serv::handleClient(size_t i)
     }
 }
 
+void serv::stop()
+{
+    _running = false;
+}
 
-void    serv::run()
+void serv::run()
 {
     initSocket();
-    while (1)
+    while (_running)
     {
         for (size_t i = 0; i < _pfds.size(); i++)
             _pfds[i].revents = 0;
         if (_pfds.empty())
-            continue;
-        if (poll(&_pfds[0], _pfds.size(), -1) < 0)
+            break;
+        int ret = poll(&_pfds[0], _pfds.size(), 1000);
+        if (ret < 0)
+        {
+            if (!_running)
+                break;
             throw std::runtime_error("Poll prblm");
+        }
         for (size_t i = 0; i < _pfds.size(); i++)
         {
             if (_pfds[i].revents & POLLIN)
@@ -171,6 +143,13 @@ void    serv::run()
             }
         }
     }
+    for (size_t i = 0; i < _pfds.size(); i++)
+        close(_pfds[i].fd);
+
+    _pfds.clear();
+    _client.clear();
+    _channels.clear();
+    std::cout << "Server stopped cleanly" << std::endl;
 }
 
 void    serv::handleNick(int fd, std::istringstream &iss)
@@ -243,35 +222,35 @@ void    serv::handleUser(int fd, std::istringstream &iss)
         sendReply(fd, "001", "Welcome to the IRC server");
 }
 
-void    serv::handlePrivmsg(int fd, std::string &line)
+void serv::handlePrivmsg(int fd, std::string &line)
 {
     if (!_client[fd].isRegistered())
         return sendReply(fd, "451", "You have not registered");
-
     size_t pos = line.find(" :");
     if (pos == std::string::npos)
         return sendReply(fd, "412", "No text to send");
-
     std::string before = line.substr(0, pos);
     std::string text = line.substr(pos + 2);
     std::istringstream iss(before);
     std::string cmd;
     std::string target;
-
     iss >> cmd >> target;
     if (target.empty())
         return sendReply(fd, "411", "No recipient given (PRIVMSG)");
-
-    if (target[0] == '#') 
+    if (target[0] == '#')
     {
-        std::string out = ":" + _client[fd].getName() + "!" + _client[fd].getUser() +
-                          "@localhost PRIVMSG " + target + " :" + text + "\r\n";
+        std::map<std::string, channel>::iterator it = _channels.find(target);
+        if (it == _channels.end())
+            return sendReply(fd, "403", target + " :No such channel");
+        if (!it->second.hasClient(fd))
+            return sendReply(fd, "442", target + " :You're not on that channel");
+
+        std::string out = ":" + _client[fd].getName() + "!" + _client[fd].getUser()
+            + "@localhost PRIVMSG " + target + " :" + text + "\r\n";
         sendToChannelExcept(target, out, fd);
     }
     else
-    {
         sendToUser(fd, target + " " + text);
-    }
 }
 
 void    serv::sendToChannel(const std::string &chanName, const std::string &msg)
@@ -303,12 +282,10 @@ void    serv::sendToUser(int fd, std::string msg)
 
 std::string serv::findUserNick(std::string msg)
 {
-    std::string user(msg);
-    int i = 0;
-    while (msg[i] != ' ')
-        i++;
-    user.erase(i, msg.size());
-    return (user);
+    size_t pos = msg.find(' ');
+    if (pos == std::string::npos)
+        return msg;
+    return msg.substr(0, pos);
 }
 
 int serv::findUserFd(std::string user)
@@ -325,7 +302,7 @@ int serv::findUserFd(std::string user)
     return(userfd);
 }
 
-void    serv::handleJoin(int fd, std::istringstream &iss)
+void serv::handleJoin(int fd, std::istringstream &iss)
 {
     std::string chanName;
     std::string key;
@@ -338,7 +315,9 @@ void    serv::handleJoin(int fd, std::istringstream &iss)
         return sendReply(fd, "476", "Invalid channel name");
     if (_channels.find(chanName) == _channels.end())
         _channels[chanName] = channel(chanName);
+
     channel &chan = _channels[chanName];
+
     if (chan.hasClient(fd))
         return sendReply(fd, "443", chanName + " :You're already on that channel");
     if (chan.isInviteOnly() && !chan.isInvited(fd) && !chan.isOp(fd))
@@ -347,15 +326,20 @@ void    serv::handleJoin(int fd, std::istringstream &iss)
         return sendReply(fd, "475", chanName + " :Cannot join channel (+k)");
     if (chan.getLimit() != -1 && (int)chan.getClient().size() >= chan.getLimit())
         return sendReply(fd, "471", chanName + " :Cannot join channel (+l)");
-   chan.addClient(fd);
+
+    chan.addClient(fd);
     if (chan.getClient().size() == 1)
         chan.addOp(fd);
-    std::string out = ":" + _client[fd].getName() + " JOIN " + chanName + "\r\n";
+
+    std::string out = ":" + _client[fd].getName() + "!" + _client[fd].getUser()
+        + "@localhost JOIN :" + chanName + "\r\n";
+
     sendToClient(fd, out);
     sendJoinToChannel(out, chanName, fd);
 
+    std::istringstream tmp(chanName);
+    handleNames(fd, tmp);
 }
-
 void    serv::sendJoinToChannel(std::string msg, std::string chanName, int exceptFd)
 {
     std::map<std::string, channel>::iterator it = _channels.find(chanName);
@@ -370,21 +354,23 @@ void    serv::sendJoinToChannel(std::string msg, std::string chanName, int excep
 }
 
 
-void    serv::handlePart(int fd, std::istringstream &iss)
+void serv::handlePart(int fd, std::istringstream &iss)
 {
     std::string chanName;
     iss >> chanName;
 
     if (!_client[fd].isRegistered())
-        return (sendReply(fd, "451", "You have not registered"));
+        return sendReply(fd, "451", "You have not registered");
     if (chanName.empty() || chanName[0] != '#')
-        return (sendReply(fd, "461", "PART :Not enough parameters"));
+        return sendReply(fd, "461", "PART :Not enough parameters");
     std::map<std::string, channel>::iterator it = _channels.find(chanName);
     if (it == _channels.end())
-        return (sendReply(fd, "403", chanName + " :No such channel"));
+        return sendReply(fd, "403", chanName + " :No such channel");
     if (!it->second.hasClient(fd))
-        return (sendReply(fd, "442", chanName + " :You're not on that channel"));
-    std::string msg = ":" + _client[fd].getName() + " PART " + chanName + "\r\n";
+        return sendReply(fd, "442", chanName + " :You're not on that channel");
+    std::string msg = ":" + _client[fd].getName() + "!" + _client[fd].getUser()
+        + "@localhost PART " + chanName + "\r\n";
+    sendToClient(fd, msg);
     sendToChannelExcept(chanName, msg, fd);
     it->second.removeClient(fd);
     it->second.deOp(fd);
@@ -393,7 +379,6 @@ void    serv::handlePart(int fd, std::istringstream &iss)
     else
         ensureOp(it->second);
 }
-
 void    serv::handleKick(int fd, std::istringstream &iss)
 {
     std::string chanName;
@@ -413,7 +398,9 @@ void    serv::handleKick(int fd, std::istringstream &iss)
     int targetFd = findUserFd(targetUser);
     if (targetFd == -1 || !it->second.hasClient(targetFd))
         return sendReply(fd, "441", targetUser + " " + chanName + " :They aren't on that channel");
-    std::string msg = ":" + _client[fd].getName() + " KICK " + chanName + " " + targetUser + " :Kicked by " + _client[fd].getName() + "\r\n";
+    std::string msg = ":" + _client[fd].getName() + "!" + _client[fd].getUser()
+    + "@localhost KICK " + chanName + " " + targetUser
+    + " :Kicked by " + _client[fd].getName() + "\r\n";
     sendToClient(targetFd, msg);
     sendToChannelExcept(chanName, msg, targetFd);
     it->second.removeClient(targetFd);
@@ -474,30 +461,38 @@ void    serv::handleQuit(int fd)
     }
 }
 
-void    serv::handleNames(int fd, std::istringstream &iss)
+void serv::handleNames(int fd, std::istringstream &iss)
 {
     std::string chanName;
     iss >> chanName;
 
     if (chanName.empty())
-        return sendToClient(fd, "Usage: NAMES #channel\r\n");
+        return sendReply(fd, "461", "NAMES :Not enough parameters");
 
     std::map<std::string, channel>::iterator it = _channels.find(chanName);
     if (it == _channels.end())
-        return sendToClient(fd, "No such channel\r\n");
-    if (!it->second.hasClient(fd))
-        return sendToClient(fd, "You are not in this channel\r\n");
+        return sendReply(fd, "403", chanName + " :No such channel");
 
-    std::string msg = "Users in " + chanName + " : ";
+    std::string names = "";
     std::set<int> &clients = it->second.getClient();
+    std::set<int>::iterator c = clients.begin();
 
-    for (std::set<int>::iterator c = clients.begin(); c != clients.end(); ++c)
+    while (c != clients.end())
     {
         if (it->second.isOp(*c))
-            msg += "@";
-        msg += _client[*c].getName() + " ";
+            names += "@";
+        names += _client[*c].getName();
+        names += " ";
+        ++c;
     }
-    sendToClient(fd, msg + "\r\n");
+
+    std::string msg353 = ":ircserv 353 " + _client[fd].getName()
+        + " = " + chanName + " :" + names + "\r\n";
+    sendToClient(fd, msg353);
+
+    std::string msg366 = ":ircserv 366 " + _client[fd].getName()
+        + " " + chanName + " :End of /NAMES list.\r\n";
+    sendToClient(fd, msg366);
 }
 
 void    serv::ensureOp(channel &chan)
@@ -524,31 +519,37 @@ void    serv::sendReply(int fd, const std::string &code, const std::string &msg)
     send(fd, out.c_str(), out.size(), 0);
 }
 
-void    serv::handleTopic(int fd, std::istringstream &iss)
+void serv::handleTopic(int fd, std::istringstream &iss)
 {
     std::string chanName;
     iss >> chanName;
     std::string newTopic;
     getline(iss, newTopic);
+
     if (!newTopic.empty() && newTopic[0] == ' ')
         newTopic.erase(0, 1);
     if (!newTopic.empty() && newTopic[0] == ':')
         newTopic.erase(0, 1);
+
     if (!_client[fd].isRegistered())
         return sendReply(fd, "451", "You have not registered");
     if (chanName.empty())
         return sendReply(fd, "461", "TOPIC :Not enough parameters");
+
     std::map<std::string, channel>::iterator it = _channels.find(chanName);
     if (it == _channels.end())
         return sendReply(fd, "403", chanName + " :No such channel");
     if (!it->second.hasClient(fd))
         return sendReply(fd, "442", chanName + " :You're not on that channel");
+
     if (!newTopic.empty())
     {
         if (it->second.isTopicOnly() && !it->second.isOp(fd))
             return sendReply(fd, "482", chanName + " :You're not channel operator");
+
         it->second.setTopic(newTopic);
-        std::string msg = ":" + _client[fd].getName() + " TOPIC " + chanName + " :" + newTopic + "\r\n";
+        std::string msg = ":" + _client[fd].getName() + "!" + _client[fd].getUser()
+            + "@localhost TOPIC " + chanName + " :" + newTopic + "\r\n";
         sendToChannel(chanName, msg);
     }
     else
@@ -571,7 +572,7 @@ void    serv::handleList(int fd)
     sendReply(fd, "323", "End of LIST");
 }
 
-void    serv::handleInvite(int fd, std::istringstream &iss)
+void serv::handleInvite(int fd, std::istringstream &iss)
 {
     std::string targetNick;
     std::string chanName;
@@ -590,7 +591,8 @@ void    serv::handleInvite(int fd, std::istringstream &iss)
     if (targetFd == -1)
         return sendReply(fd, "401", targetNick + " :No such nick");
     it->second.addInvite(targetFd);
-    std::string msg = ":" + _client[fd].getName() + " INVITE " + targetNick + " " + chanName + "\r\n";
+    std::string msg = ":" + _client[fd].getName() + "!" + _client[fd].getUser()
+        + "@localhost INVITE " + targetNick + " " + chanName + "\r\n";
     sendToClient(targetFd, msg);
     sendReply(fd, "341", targetNick + " " + chanName);
 }
@@ -674,7 +676,7 @@ void    serv::handleMode(int fd, std::istringstream &iss)
         chan.setLimit(atoi(param.c_str()));
     }
     else if (mode == "-l")
-        chan.setLimit(0);
+        chan.setLimit(-1);
     else
         return sendReply(fd, "472", mode + " :Unknown mode");
     msg = ":" + _client[fd].getName() + " MODE " + chanName + " " + mode;
